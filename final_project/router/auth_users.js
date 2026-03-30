@@ -65,20 +65,24 @@ regd_users.put("/auth/review/:isbn", (req, res) => {
   const isbn = req.params.isbn;
   let book = books[isbn];  // Retrieve book object associated with isbn
 
-  if (book) {  // Check if book exists
-      let username = req.body.username;
-      let review = req.body.review;
+  if (book) {
+    let review = req.body.review;
 
-      // Check if user is logged in
-      if (!isValid(username)) res.send("You must login to post a review");
-        
-      // Update review if provided in request body
-      if (review) {
-          book["reviews"] = {...book["reviews"], [username]: review};
-      }
+    // Get the username from the session
+    const username = req.session.authorization?.username || req.session.username;
+    
+    // Check if user is logged in
+    if (!username || !isValid(username)) {
+      return res.status(403).json({ message: "You must login to delete a review" });
+    }
+          
+    // Update review if provided in request body
+    if (review) {
+        book["reviews"] = {...book["reviews"], [username]: review};
+    }
 
-      books[isbn] = book;  // Update book details in 'books' object
-      res.send(`Book with isbn ${isbn} updated.`);
+    books[isbn] = book;  // Update book details in 'books' object
+    res.send(`The review "${review}" by "${username}" for book ${isbn} has been updated.`);
   } else {
       // Respond if friend with specified email is not found
       res.send("Unable to find book!");
@@ -105,7 +109,7 @@ regd_users.delete("/auth/review/:isbn", (req, res) => {
       delete book.reviews[username];
      
       // Send response confirming deletion of review   
-      return res.status(200).send(`Review for ISBN ${isbn} posted by ${username} has been deleted.`);
+      return res.status(200).send(`Review for ISBN ${isbn} posted by ${username} has been Successfully deleted.`);
     } else {
       // Send response letting the user know a review wasn't found
       return res.status(404).json({ message: "No review found for this user on this book." });
