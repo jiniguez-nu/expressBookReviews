@@ -1,4 +1,6 @@
 const express = require('express');
+// Requiring axios module for making HTTP requests
+const axios = require('axios').default;
 let books = require("./booksdb.js");
 let isValid = require("./auth_users.js").isValid;
 let users = require("./auth_users.js").users;
@@ -22,28 +24,45 @@ public_users.post("/register", (req,res) => {
   return res.status(404).json({message: "Unable to register user."});
 });
 
+  //fetch All books list endpoint for axios
+public_users.get('/fetchallwithaxios',async function (req, res) {
+  try {
+    if (books) {
+      return res.status(200).json(books);
+    } else {
+      return res.status(404).json({ message: "Could not load books list" });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Get the book list available in the shop
 public_users.get('/',async function (req, res) {
   //we wrap the async functions in a try to handle errors
   try {
-    const getBooks = () => {
-      return new Promise((resolve, reject) => {
-        if (books) {
-          resolve(books);
-        } else {
-          reject(new Error("Could not load books list"));
-        }
-      });
-    };
-
     // await for promise to be resolved
-    const allBooks = await getBooks();
+    const allBooks = await axios.get('http://localhost:5000/fetchallwithaxios');
 
     // Send JSON response with books data and a '200' status
-    res.status(200).send(JSON.stringify(allBooks, null, 4));
+    res.status(200).send(JSON.stringify(allBooks.data, null, 4));
   } catch (error) {
     // Error handling in case the server doesn't respond
-    res.status(500).json({ message: "Error fetching books list" });
+    res.status(500).json({ message: "Error fetching books list"+error });
+  }
+});
+
+// Get book details based on ISBN for axios
+public_users.get('/isbnwithaxios/:isbn',async function (req, res) {
+  const isbn = req.params.isbn;
+  try {
+    if (books[isbn]) {
+      return res.status(200).json(books[isbn]);
+    } else {
+      return res.status(404).json({ message: "Could not find a book with that ISBN" });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -56,55 +75,72 @@ public_users.get('/isbn/:isbn',async function (req, res) {
     const isbn = req.params.isbn;
 
     try {
-      const getBookByIsbn = (isbn) => {
-        return new Promise((resolve, reject) => {
-          let book = books[isbn];
-          if (book) {
-            resolve(book);
-          } else {
-            reject({ status: 404, message: `Book with ISBN ${isbn} not found` });
-          }
-        });
-      };
-      const bookDetails = await getBookByIsbn(isbn);
-      res.status(200).json(bookDetails);
+      const bookDetails = await axios.get(`http://localhost:5000/isbnwithaxios/${isbn}`);
+      res.status(200).json(bookDetails.data);
     } catch (error) {
       // Error handling in case the server doesn't respond
     res.status(404).json({ message: error.message });
     }
   }
  });
-  
+
+ 
+// get book details based on author for axios
+public_users.get('/authorforaxios/:author',async function (req, res) {
+  const author = req.params.author;
+  const filteredBooks = Object.entries(books)
+    .filter(([id, info]) => info.author === author)
+    .map(([id, info]) => ({
+      isbn: id,
+      ...info
+    }));
+  try {
+    if (filteredBooks.length > 0) {
+      return res.status(200).json(filteredBooks[0]);
+    } else {
+      return res.status(404).json({ message: `No books were found for ${author}` });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Get book details based on author
 public_users.get('/author/:author',async function (req, res) {
   // Get book details based on requested author
   let author = req.params.author;
 
   try {
-    const getBookByAuthor = (author) => {
-      return new Promise((resolve, reject) => {
-        const filteredBooks = Object.entries(books)
-          .filter(([id, info]) => info.author === author)
-          .map(([id, info]) => ({
-            isbn: id,
-            ...info
-          }));
-        if (filteredBooks.length > 0) {
-          resolve(filteredBooks[0]);
-        } else {
-          reject(new Error(`No books were found for ${author}`));
-        }      
-      })
-    }  
     // Await for the response
-    const booksFound = await getBookByAuthor(author);
+    const booksFound = await axios.get(`http://localhost:5000/authorforaxios/${author}`);
 
     // return the response with a 200 status
-    res.status(200).send(JSON.stringify(booksFound));
+    res.status(200).send(JSON.stringify(booksFound.data));
   } catch (error) {
     // Handle error
     res.status(404).json({message: "Author not found"});
   } 
+});
+
+// Get all books based on title for axios
+public_users.get('/titleforaxios/:title',async function (req, res) {
+  const title = req.params.title;
+  const filteredBooks = Object.entries(books)
+    .filter(([id, info]) => info.title === title)
+    .map(([id, info]) => ({
+      isbn: id,
+      ...info
+    }));
+
+  try {
+    if (filteredBooks.length > 0) {
+      return res.status(200).json(filteredBooks[0]);
+    } else {
+      return res.status(404).json({ message: `Title ${title} not found` });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // Get all books based on title
@@ -112,27 +148,11 @@ public_users.get('/title/:title',async function (req, res) {
   // Get title from params
   let title = req.params.title;
   try {
-    const fetchBookByTitle = (title) => {
-      return new Promise((resolve, reject) => {
-        const filteredBooks = Object.entries(books)
-          .filter(([id, info]) => info.title === title)
-          .map(([id, info]) => ({
-            isbn: id,
-            ...info
-          }));
-        if (filteredBooks.length > 0) {
-          resolve(JSON.stringify(filteredBooks[0],null,4));
-        } else {
-          reject(new Error(`Title ${title} not found`));
-        }  
-      });
-    }
-    
     // Await for the response
-    const booksFound = await fetchBookByTitle(title);
+    const booksFound = await axios.get(`http://localhost:5000/titleforaxios/${title}`);
 
     // return the response with a 200 status
-    res.status(200).send(booksFound);
+    res.status(200).send(booksFound.data);
   } catch (error) {
     res.status(404).json({message: "Title not found"});
   }
